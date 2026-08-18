@@ -30,7 +30,6 @@ use core_privacy\local\metadata\null_provider;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class provider implements null_provider {
-
     /**
      * Explain why this plugin stores no user data.
      *

@@ -34,7 +34,6 @@ use filter_saylorcode\local\embed_token;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class text_filter extends \core_filters\text_filter {
-
     /**
      * Replace every embed token in the given text.
      *
