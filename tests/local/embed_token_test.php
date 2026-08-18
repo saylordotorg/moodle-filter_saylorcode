@@ -187,7 +187,7 @@ final class embed_token_test extends \advanced_testcase {
      * A token whose URL has already been linkified still parses, and the
      * address still goes nowhere.
      */
-    public function test_linkified_token_still_parses_and_discards() {
+    public function test_linkified_token_still_parses_and_discards(): void {
         $attributes = 'exercise=CS101-U05-E03;runner=<a href="http://evil.example.org">http://evil.example.org</a>';
 
         $token = embed_token::parse($attributes);
