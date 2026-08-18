@@ -39,8 +39,20 @@ use local_saylorcode\local\stable_id;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 final class embed_token {
-    /** @var string Matches a whole token and captures its attribute list. */
-    public const PATTERN = '/\[\[saylorcode:([^\]\[<>]{1,255})\]\]/i';
+    /**
+     * Matches a whole token and captures its attribute list.
+     *
+     * Angle brackets are tolerated rather than excluded, because filters that
+     * run earlier may already have rewritten something inside the token. The
+     * URL to link filter, for example, turns a bare address into an anchor,
+     * and a pattern that rejected markup would then silently stop matching.
+     * Any markup captured here is stripped in parse() before anything is read,
+     * and every value is whitelisted after that, so tolerating it costs
+     * nothing and makes the filter independent of filter ordering.
+     *
+     * @var string
+     */
+    public const PATTERN = '/\[\[saylorcode:([^\]\[]{1,255})\]\]/i';
 
     /** @var string Compact three tab presentation for inline content. */
     public const MODE_COMPACT = 'compact';
@@ -108,6 +120,10 @@ final class embed_token {
      * @return self|null Null when the token does not name a valid exercise.
      */
     public static function parse(string $attributes): ?self {
+        // Remove any markup an earlier filter introduced before reading a
+        // single value. Nothing inside a token is ever meant to be markup.
+        $attributes = strip_tags($attributes);
+
         $parsed = [];
         foreach (explode(';', $attributes) as $pair) {
             $pair = trim($pair);

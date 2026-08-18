@@ -169,11 +169,39 @@ final class embed_token_test extends \advanced_testcase {
     }
 
     /**
-     * The token pattern must not match across markup boundaries.
+     * Markup introduced by an earlier filter is stripped, not fatal.
+     *
+     * Moodle's URL to link filter rewrites a bare address inside a token before
+     * this filter runs. If that stopped the token matching, a broken reference
+     * would stay visible to students instead of being hidden from them, and the
+     * behaviour would depend on how an administrator ordered the filters.
      */
-    public function test_pattern_does_not_span_markup(): void {
-        $text = '[[saylorcode:exercise=<b>CS101-U05-E03</b>]]';
+    public function test_markup_from_earlier_filters_is_stripped(): void {
+        $token = embed_token::parse('exercise=<b>CS101-U05-E03</b>');
 
-        $this->assertDoesNotMatchRegularExpression(embed_token::PATTERN, $text);
+        $this->assertNotNull($token);
+        $this->assertSame('CS101-U05-E03', (string) $token->get_exercise());
+    }
+
+    /**
+     * A token whose URL has already been linkified still parses, and the
+     * address still goes nowhere.
+     */
+    public function test_linkified_token_still_parses_and_discards() {
+        $attributes = 'exercise=CS101-U05-E03;runner=<a href="http://evil.example.org">http://evil.example.org</a>';
+
+        $token = embed_token::parse($attributes);
+
+        $this->assertNotNull($token);
+        $this->assertStringNotContainsString('evil.example.org', (string) $token);
+    }
+
+    /**
+     * The pattern is still bounded, so a token cannot swallow a whole page.
+     */
+    public function test_pattern_is_length_bounded(): void {
+        $huge = '[[saylorcode:exercise=CS101-U05-E03' . str_repeat('x', 300) . ']]';
+
+        $this->assertDoesNotMatchRegularExpression(embed_token::PATTERN, $huge);
     }
 }
