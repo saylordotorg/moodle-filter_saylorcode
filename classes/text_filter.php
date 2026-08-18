@@ -86,7 +86,7 @@ class text_filter extends \core_filters\text_filter {
      * @return string HTML.
      */
     protected function render_embed(embed_token $token): string {
-        global $OUTPUT, $USER;
+        global $OUTPUT, $PAGE, $USER;
 
         $exercise = (string) $token->get_exercise();
 
@@ -115,7 +115,76 @@ class text_filter extends \core_filters\text_filter {
             return $OUTPUT->render_from_template('filter_saylorcode/embed_link', $data);
         }
 
-        return $OUTPUT->render_from_template('filter_saylorcode/embed', $data);
+        // An embed with no backing activity has nowhere to save work and no
+        // web services to call, so it would render an editor that silently
+        // does nothing. Resolve the activity that carries this exercise and
+        // hand rendering to the module itself, which keeps an embedded
+        // workspace identical to the stand alone one rather than letting the
+        // two drift apart.
+        $backing = $this->find_backing_activity($exercise);
+
+        if ($backing === null) {
+            $data['unavailable'] = get_string('noactivity', 'filter_saylorcode', $exercise);
+            return $OUTPUT->render_from_template('filter_saylorcode/embed_link', $data);
+        }
+
+        [$instance, $cm] = $backing;
+
+        $modcontext = \context_module::instance($cm->id);
+        if (!has_capability('mod/saylorcode:view', $modcontext)) {
+            $data['unavailable'] = get_string('noactivity', 'filter_saylorcode', $exercise);
+            return $OUTPUT->render_from_template('filter_saylorcode/embed_link', $data);
+        }
+
+        $renderer = $PAGE->get_renderer('mod_saylorcode');
+
+        return \html_writer::div(
+            $renderer->render_activity($instance, $cm, $modcontext),
+            'saylorcode-embed saylorcode-embed-' . $token->get_mode(),
+            ['data-region' => 'saylorcode-embed', 'data-exercise' => $exercise]
+        );
+    }
+
+    /**
+     * Find the activity in this course that carries the given exercise.
+     *
+     * Until the central library lands, an exercise is defined on an activity,
+     * so an embed borrows the activity that already holds it. Searching the
+     * current course rather than the whole site keeps one course's embed from
+     * quietly resolving to another course's activity.
+     *
+     * @param string $exercise The stable exercise id.
+     * @return array|null The instance and course module, or null when none matches.
+     */
+    protected function find_backing_activity(string $exercise): ?array {
+        global $DB;
+
+        $coursectx = $this->context->get_course_context(false);
+        if (!$coursectx) {
+            return null;
+        }
+
+        $instance = $DB->get_record('saylorcode', [
+            'course' => $coursectx->instanceid,
+            'stableid' => $exercise,
+        ], '*', IGNORE_MULTIPLE);
+
+        if (!$instance) {
+            return null;
+        }
+
+        $cm = get_coursemodule_from_instance('saylorcode', $instance->id, $coursectx->instanceid, false, IGNORE_MISSING);
+        if (!$cm) {
+            return null;
+        }
+
+        $modinfo = get_fast_modinfo($coursectx->instanceid);
+        $cminfo = $modinfo->get_cm($cm->id);
+        if (!$cminfo->uservisible) {
+            return null;
+        }
+
+        return [$instance, $cminfo];
     }
 
     /**

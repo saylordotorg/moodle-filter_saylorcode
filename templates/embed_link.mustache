@@ -24,15 +24,22 @@
     Context variables required for this template:
     * exercise string Stable exercise id.
     * activityurl string Link to the stand alone exercise.
+    * unavailable string|null Why an inline workspace could not be shown.
 
     Example context (json):
     {
         "exercise": "CS101-U05-E03",
-        "activityurl": "https://example.org/local/saylorcode/exercise.php?stableid=CS101-U05-E03"
+        "activityurl": "https://example.org/local/saylorcode/exercise.php?stableid=CS101-U05-E03",
+        "unavailable": null
     }
 }}
-<p class="saylorcode-embed-linkonly">
-    <a href="{{activityurl}}" data-exercise="{{exercise}}">
-        {{#str}}openexercise, filter_saylorcode{{/str}}
-    </a>
-</p>
+<div class="saylorcode-embed-linkonly">
+    {{#unavailable}}
+        <div class="alert alert-warning" role="status">{{.}}</div>
+    {{/unavailable}}
+    <p>
+        <a href="{{activityurl}}" data-exercise="{{exercise}}">
+            {{#str}}openexercise, filter_saylorcode{{/str}}
+        </a>
+    </p>
+</div>

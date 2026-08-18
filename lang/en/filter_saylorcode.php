@@ -27,6 +27,7 @@ defined('MOODLE_INTERNAL') || die();
 $string['filtername'] = 'Saylor Code Studio embeds';
 $string['invalidtoken'] = 'This Saylor Code Studio embed does not name a valid exercise, so it has been hidden from students: {$a}. The expected form is [[saylorcode:exercise=CS101-U05-E03]].';
 $string['loadingexercise'] = 'Loading the coding exercise.';
+$string['noactivity'] = 'Exercise {$a} is not set up in this course yet, so it cannot be worked on here.';
 $string['nojavascript'] = 'This coding exercise needs JavaScript.';
 $string['notsignedin'] = 'Sign in to save your work on this exercise. You can still open it to read and experiment, but nothing will be kept.';
 $string['openexercise'] = 'Open the exercise';
