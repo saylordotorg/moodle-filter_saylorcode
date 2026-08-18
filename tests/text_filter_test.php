@@ -96,7 +96,8 @@ final class text_filter_test extends \advanced_testcase {
      * An embed must not reach into another course for its activity.
      */
     public function test_embed_does_not_borrow_another_courses_activity(): void {
-        [, , ] = $this->build_course('CS101-U01-E01');
+        // A course that does carry the exercise.
+        $this->build_course('CS101-U01-E01');
 
         // A second course with no activity of its own.
         $other = $this->getDataGenerator()->create_course();
