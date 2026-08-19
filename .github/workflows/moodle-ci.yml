@@ -88,11 +88,14 @@ jobs:
           # 429 and the whole job fails before any check runs.
           COMPOSER_AUTH: '{"github-oauth":{"github.com":"${{ secrets.GITHUB_TOKEN }}"}}'
 
-      - name: Add the service layer dependency
-        # mod_saylorcode declares a dependency on local_saylorcode, so the
-        # service layer has to be present before Moodle will install this
-        # plugin at all.
-        run: moodle-plugin-ci add-plugin saylordotorg/moodle-local_saylorcode
+      - name: Add the plugin dependencies
+        # This filter renders an embedded workspace with the activity module's
+        # own renderer, and its tests build activities with that module's test
+        # generator, so both plugins have to be installed before Moodle will
+        # install this one or run its tests.
+        run: |
+          moodle-plugin-ci add-plugin saylordotorg/moodle-local_saylorcode
+          moodle-plugin-ci add-plugin saylordotorg/moodle-mod_saylorcode
 
       - name: Install Moodle and the plugin
         run: moodle-plugin-ci install --plugin ./plugin --db-host=127.0.0.1
