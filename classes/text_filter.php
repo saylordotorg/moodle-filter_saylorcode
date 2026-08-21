@@ -48,11 +48,26 @@ class text_filter extends \core_filters\text_filter {
      */
     protected const MAX_RESOLUTIONS = 10;
 
+    /**
+     * How many inline workspaces may render per filter instance.
+     *
+     * Separate from the resolution ceiling, because the cache makes repeats of
+     * one exercise free to resolve while each repeat still costs a full module
+     * render. Without its own ceiling, one post repeating a single valid token
+     * hundreds of times would still force hundreds of renders per reader.
+     *
+     * @var int
+     */
+    protected const MAX_WORKSPACES = 10;
+
     /** @var array Resolved backing activities this instance has already looked up. */
     protected array $resolved = [];
 
     /** @var int How many backing activity resolutions this instance has spent. */
     protected int $resolutions = 0;
+
+    /** @var int How many inline workspaces this instance has rendered. */
+    protected int $workspaces = 0;
 
     /**
      * Replace every embed token in the given text.
@@ -177,6 +192,15 @@ class text_filter extends \core_filters\text_filter {
             $data['unavailable'] = get_string('noactivity', 'filter_saylorcode', $exercise);
             return $OUTPUT->render_from_template('filter_saylorcode/embed_link', $data);
         }
+
+        // The render ceiling is separate from the resolution one: a repeated
+        // token resolves from the cache for free, but every occurrence would
+        // still cost a full module render, which does its own database work.
+        if ($this->workspaces >= self::MAX_WORKSPACES) {
+            $data['unavailable'] = get_string('embedlimit', 'filter_saylorcode');
+            return $OUTPUT->render_from_template('filter_saylorcode/embed_link', $data);
+        }
+        $this->workspaces++;
 
         $renderer = $PAGE->get_renderer('mod_saylorcode');
         $workspace = $renderer->render_activity($instance, $cm, $modcontext);

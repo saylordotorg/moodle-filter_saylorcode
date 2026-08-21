@@ -141,21 +141,28 @@ final class text_filter_test extends \advanced_testcase {
     }
 
     /**
-     * Repeats of one exercise stay free and keep rendering past the ceiling.
+     * Repeats of one exercise resolve from the cache but still meet the
+     * render ceiling.
+     *
+     * The cache makes repeated lookups free; it must not make repeated
+     * renders free, because each workspace render does its own database
+     * work. Past the ceiling the repeats degrade to links like anything
+     * else.
      */
-    public function test_repeated_tokens_share_one_resolution(): void {
+    public function test_repeated_tokens_stop_rendering_past_the_ceiling(): void {
         [$course, , $filter] = $this->build_course();
 
         $this->setUser($this->getDataGenerator()->create_and_enrol($course, 'student'));
 
         $result = $filter->filter(str_repeat('[[saylorcode:exercise=CS101-U01-E01]] ', 30));
 
-        // Every repeat resolves from the cache, so none is turned away.
-        $this->assertStringNotContainsString(
+        // Ten workspaces render; the remaining twenty are links.
+        $this->assertSame(10, substr_count($result, 'data-region="saylorcode-shell"'));
+        $this->assertSame(20, substr_count($result, 'saylorcode-embed-linkonly'));
+        $this->assertStringContainsString(
             get_string('embedlimit', 'filter_saylorcode'),
             $result
         );
-        $this->assertSame(30, substr_count($result, 'data-exercise="CS101-U01-E01"'));
     }
 
     /**
