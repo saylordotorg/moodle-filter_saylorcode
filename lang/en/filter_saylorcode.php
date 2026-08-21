@@ -24,6 +24,7 @@
 
 defined('MOODLE_INTERNAL') || die();
 
+$string['embedlimit'] = 'This page embeds more exercises than can be shown inline. Open this one directly instead.';
 $string['filtername'] = 'Saylor Code Studio embeds';
 $string['invalidtoken'] = 'This Saylor Code Studio embed does not name a valid exercise, so it has been hidden from students: {$a}. The expected form is [[saylorcode:exercise=CS101-U05-E03]].';
 $string['loadingexercise'] = 'Loading the coding exercise.';
@@ -34,3 +35,4 @@ $string['openexercise'] = 'Open the exercise';
 $string['openfullscreen'] = 'Open full screen';
 $string['pluginname'] = 'Saylor Code Studio embeds';
 $string['privacy:metadata'] = 'The Saylor Code Studio embed filter stores no personal data. It resolves a reference in course content into a coding workspace, and any work a student does is stored by the activity rather than by this filter.';
+$string['versionpinunsupported'] = 'This embed pins version {$a}, but pinned versions are not supported yet, so the current exercise is shown. Remove the version attribute, or wait for the exercise library.';

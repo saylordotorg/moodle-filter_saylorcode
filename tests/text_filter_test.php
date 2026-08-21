@@ -111,6 +111,54 @@ final class text_filter_test extends \advanced_testcase {
     }
 
     /**
+     * A flood of tokens cannot buy unbounded lookups and workspaces.
+     *
+     * The filter runs on student-authored content, so one forum post holding
+     * hundreds of distinct tokens must not turn every reader's page view into
+     * hundreds of database lookups and inline workspace renders. Past the
+     * ceiling the reader gets the link, which still opens the exercise.
+     */
+    public function test_token_flood_degrades_to_links_past_the_ceiling(): void {
+        [$course, , $filter] = $this->build_course();
+
+        $this->setUser($this->getDataGenerator()->create_and_enrol($course, 'student'));
+
+        $tokens = '';
+        for ($i = 1; $i <= 30; $i++) {
+            $tokens .= sprintf('[[saylorcode:exercise=CS101-U01-E%02d]] ', $i);
+        }
+
+        $result = $filter->filter($tokens);
+
+        // The first token names the real exercise, so it still resolves.
+        $this->assertStringContainsString('data-region="editor"', $result);
+
+        // Past the ceiling the token is answered without a lookup.
+        $this->assertStringContainsString(
+            get_string('embedlimit', 'filter_saylorcode'),
+            $result
+        );
+    }
+
+    /**
+     * Repeats of one exercise stay free and keep rendering past the ceiling.
+     */
+    public function test_repeated_tokens_share_one_resolution(): void {
+        [$course, , $filter] = $this->build_course();
+
+        $this->setUser($this->getDataGenerator()->create_and_enrol($course, 'student'));
+
+        $result = $filter->filter(str_repeat('[[saylorcode:exercise=CS101-U01-E01]] ', 30));
+
+        // Every repeat resolves from the cache, so none is turned away.
+        $this->assertStringNotContainsString(
+            get_string('embedlimit', 'filter_saylorcode'),
+            $result
+        );
+        $this->assertSame(30, substr_count($result, 'data-exercise="CS101-U01-E01"'));
+    }
+
+    /**
      * A malformed reference is hidden from a student.
      */
     public function test_broken_reference_is_hidden_from_students(): void {
