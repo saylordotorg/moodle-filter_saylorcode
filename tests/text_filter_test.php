@@ -111,6 +111,61 @@ final class text_filter_test extends \advanced_testcase {
     }
 
     /**
+     * A flood of tokens cannot buy unbounded lookups and workspaces.
+     *
+     * The filter runs on student-authored content, so one forum post holding
+     * hundreds of distinct tokens must not turn every reader's page view into
+     * hundreds of database lookups and inline workspace renders. Past the
+     * ceiling the reader gets the link, which still opens the exercise.
+     */
+    public function test_token_flood_degrades_to_links_past_the_ceiling(): void {
+        [$course, , $filter] = $this->build_course();
+
+        $this->setUser($this->getDataGenerator()->create_and_enrol($course, 'student'));
+
+        $tokens = '';
+        for ($i = 1; $i <= 30; $i++) {
+            $tokens .= sprintf('[[saylorcode:exercise=CS101-U01-E%02d]] ', $i);
+        }
+
+        $result = $filter->filter($tokens);
+
+        // The first token names the real exercise, so it still resolves.
+        $this->assertStringContainsString('data-region="editor"', $result);
+
+        // Past the ceiling the token is answered without a lookup.
+        $this->assertStringContainsString(
+            get_string('embedlimit', 'filter_saylorcode'),
+            $result
+        );
+    }
+
+    /**
+     * Repeats of one exercise resolve from the cache but still meet the
+     * render ceiling.
+     *
+     * The cache makes repeated lookups free; it must not make repeated
+     * renders free, because each workspace render does its own database
+     * work. Past the ceiling the repeats degrade to links like anything
+     * else.
+     */
+    public function test_repeated_tokens_stop_rendering_past_the_ceiling(): void {
+        [$course, , $filter] = $this->build_course();
+
+        $this->setUser($this->getDataGenerator()->create_and_enrol($course, 'student'));
+
+        $result = $filter->filter(str_repeat('[[saylorcode:exercise=CS101-U01-E01]] ', 30));
+
+        // Ten workspaces render; the remaining twenty are links.
+        $this->assertSame(10, substr_count($result, 'data-region="saylorcode-shell"'));
+        $this->assertSame(20, substr_count($result, 'saylorcode-embed-linkonly'));
+        $this->assertStringContainsString(
+            get_string('embedlimit', 'filter_saylorcode'),
+            $result
+        );
+    }
+
+    /**
      * A malformed reference is hidden from a student.
      */
     public function test_broken_reference_is_hidden_from_students(): void {

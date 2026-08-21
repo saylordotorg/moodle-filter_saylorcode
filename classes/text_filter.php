@@ -35,6 +35,41 @@ use filter_saylorcode\local\embed_token;
  */
 class text_filter extends \core_filters\text_filter {
     /**
+     * How many tokens may resolve a backing activity per filter instance.
+     *
+     * The filter runs on student-authored content too, and each resolved
+     * embed costs database work: an activity lookup, and for a workspace a
+     * full module render that creates attempt rows. Without a ceiling, one
+     * forum post holding hundreds of tokens turns every reader's page view
+     * into hundreds of queries. Ten is more inline workspaces than any real
+     * page carries; past it, readers get the link instead.
+     *
+     * @var int
+     */
+    protected const MAX_RESOLUTIONS = 10;
+
+    /**
+     * How many inline workspaces may render per filter instance.
+     *
+     * Separate from the resolution ceiling, because the cache makes repeats of
+     * one exercise free to resolve while each repeat still costs a full module
+     * render. Without its own ceiling, one post repeating a single valid token
+     * hundreds of times would still force hundreds of renders per reader.
+     *
+     * @var int
+     */
+    protected const MAX_WORKSPACES = 10;
+
+    /** @var array Resolved backing activities this instance has already looked up. */
+    protected array $resolved = [];
+
+    /** @var int How many backing activity resolutions this instance has spent. */
+    protected int $resolutions = 0;
+
+    /** @var int How many inline workspaces this instance has rendered. */
+    protected int $workspaces = 0;
+
+    /**
      * Replace every embed token in the given text.
      *
      * @param string $text The text to filter.
@@ -115,6 +150,28 @@ class text_filter extends \core_filters\text_filter {
             return $OUTPUT->render_from_template('filter_saylorcode/embed_link', $data);
         }
 
+        // A guest or logged out visitor gets the link, not an editor. Their
+        // work cannot be stored, so handing them a workspace would invite them
+        // to type something and then lose it.
+        if (!$canpersist) {
+            $data['unavailable'] = get_string('notsignedin', 'filter_saylorcode');
+            return $OUTPUT->render_from_template('filter_saylorcode/embed_link', $data);
+        }
+
+        // Past the resolution ceiling the reader gets the link, which still
+        // opens the exercise, rather than another inline workspace. Checked
+        // before the lookup so a flood of tokens cannot buy database work.
+        // Repeats of an exercise already resolved stay free and keep working.
+        $courseid = $this->backing_course_id();
+        if (
+            $courseid !== null
+            && !array_key_exists($courseid . ':' . $exercise, $this->resolved)
+            && $this->resolutions >= self::MAX_RESOLUTIONS
+        ) {
+            $data['unavailable'] = get_string('embedlimit', 'filter_saylorcode');
+            return $OUTPUT->render_from_template('filter_saylorcode/embed_link', $data);
+        }
+
         // An embed with no backing activity has nowhere to save work and no
         // web services to call, so it would render an editor that silently
         // does nothing. Resolve the activity that carries this exercise and
@@ -136,12 +193,41 @@ class text_filter extends \core_filters\text_filter {
             return $OUTPUT->render_from_template('filter_saylorcode/embed_link', $data);
         }
 
+        // The render ceiling is separate from the resolution one: a repeated
+        // token resolves from the cache for free, but every occurrence would
+        // still cost a full module render, which does its own database work.
+        if ($this->workspaces >= self::MAX_WORKSPACES) {
+            $data['unavailable'] = get_string('embedlimit', 'filter_saylorcode');
+            return $OUTPUT->render_from_template('filter_saylorcode/embed_link', $data);
+        }
+        $this->workspaces++;
+
         $renderer = $PAGE->get_renderer('mod_saylorcode');
+        $workspace = $renderer->render_activity($instance, $cm, $modcontext);
+
+        // A pinned version cannot be honoured while an exercise lives on an
+        // activity rather than in a versioned library, so the token asks for
+        // something this build cannot give. Rendering the current version
+        // silently would leave an author believing a pin is in force, so the
+        // people who can act on it are told. Students are not, because the
+        // message is about authoring rather than about their work.
+        $notice = '';
+        if ($token->is_pinned() && $this->viewer_can_edit()) {
+            $notice = \html_writer::div(
+                get_string('versionpinunsupported', 'filter_saylorcode', s($token->get_version())),
+                'alert alert-warning',
+                ['role' => 'status']
+            );
+        }
 
         return \html_writer::div(
-            $renderer->render_activity($instance, $cm, $modcontext),
+            $notice . $workspace,
             'saylorcode-embed saylorcode-embed-' . $token->get_mode(),
-            ['data-region' => 'saylorcode-embed', 'data-exercise' => $exercise]
+            [
+                'data-region' => 'saylorcode-embed',
+                'data-exercise' => $exercise,
+                'data-version' => $token->get_version(),
+            ]
         );
     }
 
@@ -157,15 +243,47 @@ class text_filter extends \core_filters\text_filter {
      * @return array|null The instance and course module, or null when none matches.
      */
     protected function find_backing_activity(string $exercise): ?array {
-        global $DB;
-
-        $coursectx = $this->context->get_course_context(false);
-        if (!$coursectx) {
+        $courseid = $this->backing_course_id();
+        if ($courseid === null) {
             return null;
         }
 
+        // Cached per instance, so a text repeating one token many times costs
+        // one lookup. Kept on the instance rather than in a static, because a
+        // static outlives the data it describes between unit tests.
+        $key = $courseid . ':' . $exercise;
+        if (array_key_exists($key, $this->resolved)) {
+            return $this->resolved[$key];
+        }
+
+        $this->resolutions++;
+
+        return $this->resolved[$key] = $this->lookup_backing_activity($courseid, $exercise);
+    }
+
+    /**
+     * The course the current context resolves embeds against, or null.
+     *
+     * @return int|null
+     */
+    protected function backing_course_id(): ?int {
+        $coursectx = $this->context->get_course_context(false);
+
+        return $coursectx ? (int) $coursectx->instanceid : null;
+    }
+
+    /**
+     * The uncached lookup behind find_backing_activity().
+     *
+     * @param int $courseid The course to search.
+     * @param string $exercise The stable exercise id.
+     * @return array|null The instance and course module, or null when none matches.
+     */
+    protected function lookup_backing_activity(int $courseid, string $exercise): ?array {
+        global $DB;
+
         $instance = $DB->get_record('saylorcode', [
-            'course' => $coursectx->instanceid,
+            'course' => $courseid,
             'stableid' => $exercise,
         ], '*', IGNORE_MULTIPLE);
 
@@ -173,12 +291,12 @@ class text_filter extends \core_filters\text_filter {
             return null;
         }
 
-        $cm = get_coursemodule_from_instance('saylorcode', $instance->id, $coursectx->instanceid, false, IGNORE_MISSING);
+        $cm = get_coursemodule_from_instance('saylorcode', $instance->id, $courseid, false, IGNORE_MISSING);
         if (!$cm) {
             return null;
         }
 
-        $modinfo = get_fast_modinfo($coursectx->instanceid);
+        $modinfo = get_fast_modinfo($courseid);
         $cminfo = $modinfo->get_cm($cm->id);
         if (!$cminfo->uservisible) {
             return null;
