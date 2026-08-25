@@ -111,6 +111,73 @@ final class text_filter_test extends \advanced_testcase {
     }
 
     /**
+     * A guest gets the link, never an editor.
+     *
+     * Guest work cannot be stored, so handing a guest a workspace would invite
+     * them to type something and then lose it.
+     */
+    public function test_guest_gets_a_link_rather_than_a_workspace(): void {
+        [, , $filter] = $this->build_course();
+
+        $this->setGuestUser();
+
+        $result = $filter->filter('[[saylorcode:exercise=CS101-U01-E01]]');
+
+        $this->assertStringNotContainsString('data-region="editor"', $result);
+        $this->assertStringContainsString('Sign in to save your work', $result);
+    }
+
+    /**
+     * A logged out visitor is treated the same way.
+     */
+    public function test_logged_out_visitor_gets_a_link(): void {
+        [, , $filter] = $this->build_course();
+
+        $this->setUser(null);
+
+        $result = $filter->filter('[[saylorcode:exercise=CS101-U01-E01]]');
+
+        $this->assertStringNotContainsString('data-region="editor"', $result);
+    }
+
+    /**
+     * A pinned version is reported to an author rather than silently ignored.
+     *
+     * Versions do not exist yet, so a pin cannot be honoured. Rendering the
+     * current exercise without saying so would leave an author believing their
+     * pin was in force.
+     */
+    public function test_pinned_version_warns_an_author(): void {
+        [$course, , $filter] = $this->build_course();
+
+        $this->setUser($this->getDataGenerator()->create_and_enrol($course, 'editingteacher'));
+
+        $result = $filter->filter('[[saylorcode:exercise=CS101-U01-E01;version=7]]');
+
+        $this->assertStringContainsString('pinned versions are not supported yet', $result);
+        // The embed still renders around the warning, so the reading is not
+        // broken by it. Staff hold no attempt, so the embed path shows them the
+        // workspace's permission notice rather than an editor -- the editor is
+        // for students, and staff preview through preview.php instead.
+        $this->assertStringContainsString('data-region="saylorcode-embed"', $result);
+        $this->assertStringNotContainsString('data-region="editor"', $result);
+    }
+
+    /**
+     * A student is not shown the pinned version warning.
+     */
+    public function test_pinned_version_does_not_warn_a_student(): void {
+        [$course, , $filter] = $this->build_course();
+
+        $this->setUser($this->getDataGenerator()->create_and_enrol($course, 'student'));
+
+        $result = $filter->filter('[[saylorcode:exercise=CS101-U01-E01;version=7]]');
+
+        $this->assertStringNotContainsString('pinned versions are not supported yet', $result);
+        $this->assertStringContainsString('data-region="editor"', $result);
+    }
+
+    /**
      * A flood of tokens cannot buy unbounded lookups and workspaces.
      *
      * The filter runs on student-authored content, so one forum post holding
