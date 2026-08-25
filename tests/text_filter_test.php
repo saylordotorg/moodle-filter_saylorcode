@@ -138,6 +138,10 @@ final class text_filter_test extends \advanced_testcase {
         $result = $filter->filter('[[saylorcode:exercise=CS101-U01-E01]]');
 
         $this->assertStringNotContainsString('data-region="editor"', $result);
+        // Absence of an editor is not enough on its own: an empty result or an
+        // unchanged token would pass that too. The point of the fallback is a
+        // usable link, so assert the link-only presentation actually rendered.
+        $this->assertStringContainsString('saylorcode-embed-linkonly', $result);
     }
 
     /**
